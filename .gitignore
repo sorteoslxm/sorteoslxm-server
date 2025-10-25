@@ -1,14 +1,4 @@
-HEAD
-HEAD
-/node_modules
-.env
-
+node_modules/
 .env
 config/sorteoslxm-firebase-adminsdk.json
- c941d75 (Backend listo para Render, sin secretos)
-
-/config/sorteoslxm-firebase-adminsdk.json
-.env
-11ed3ce (Backend listo para Render)
-.env
-config/*.json
+build/

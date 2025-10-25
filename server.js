@@ -2,57 +2,34 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
-import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import dotenv from "dotenv";
-import fs from "fs";
-
-dotenv.config();
+import { db } from "./config/firebase.js";
+import { cloudinary } from "./config/cloudinary.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔹 Firebase Admin
-const serviceAccount = JSON.parse(
-  fs.readFileSync("./config/sorteoslxm-firebase-adminsdk.json", "utf-8")
-);
-
-initializeApp({
-  credential: cert(serviceAccount)
-});
-
-const db = getFirestore();
-
-// 🔹 Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-// 🔹 Multer
+// 🔹 Multer para subir archivos
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// 🔹 Crear sorteo
+// 🔹 Crear sorteo con imagen
 app.post("/api/sorteos", upload.single("imagen"), async (req, res) => {
   try {
-    const { titulo, descripcion, precio, numerosTotales } = req.body;
     const file = req.file;
+    const { titulo, descripcion, precio, numerosTotales } = req.body;
 
     if (!file) return res.status(400).json({ error: "Imagen requerida" });
 
     const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream({ folder: "sorteos" }, (err, res) => {
-        if (err) reject(err);
-        else resolve(res);
+      const stream = cloudinary.uploader.upload_stream({ folder: "sorteos" }, (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
       });
       stream.end(file.buffer);
     });
 
-    const docRef = await db.collection("sorteos").add({
+    await db.collection("sorteos").add({
       titulo,
       descripcion,
       precio: Number(precio),
@@ -63,8 +40,7 @@ app.post("/api/sorteos", upload.single("imagen"), async (req, res) => {
       fecha: new Date()
     });
 
-    const newDoc = await docRef.get();
-    res.json({ id: newDoc.id, ...newDoc.data() });
+    res.json({ message: "Sorteo creado correctamente" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error creando sorteo" });
