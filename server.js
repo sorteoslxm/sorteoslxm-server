@@ -1,10 +1,10 @@
-// server.js
 import express from "express";
 import cors from "cors";
-import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
-import admin from "firebase-admin";
 import dotenv from "dotenv";
+import { db } from "./firebase.js";
+import { v2 as cloudinary } from "cloudinary";
+import multer from "multer";
+import mercadopago from "mercadopago";
 
 dotenv.config();
 
@@ -12,129 +12,67 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔹 Firebase Admin desde variable de entorno
-if (!process.env.FIREBASE_CONFIG) {
-  console.error("❌ ERROR: No se encontró la variable de entorno FIREBASE_CONFIG");
-  process.exit(1);
-}
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-admin.initializeApp({
-  credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_CONFIG)),
-});
-
-const db = admin.firestore();
-
-// 🔹 Cloudinary
+// Configuración Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// 🔹 Multer
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+// Configuración MercadoPago
+mercadopago.configurations.setAccessToken(process.env.MP_ACCESS_TOKEN);
 
-// 🔹 Crear sorteo
-app.post("/api/sorteos", upload.single("imagen"), async (req, res) => {
-  try {
-    const { titulo, descripcion, precio, numerosTotales } = req.body;
-    const file = req.file;
+// 🟢 Rutas
 
-    if (!file) return res.status(400).json({ error: "Imagen requerida" });
+// Test
+app.get("/", (req, res) => res.send("Backend funcionando ✅"));
 
-    const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream({ folder: "sorteos" }, (err, res) => {
-        if (err) reject(err);
-        else resolve(res);
-      });
-      stream.end(file.buffer);
-    });
-
-    const docRef = await db.collection("sorteos").add({
-      titulo,
-      descripcion,
-      precio: Number(precio),
-      numerosTotales: Number(numerosTotales),
-      numerosVendidos: 0,
-      imagenUrl: result.secure_url,
-      activo: true,
-      fecha: new Date(),
-    });
-
-    const newDoc = await docRef.get();
-    res.json({ id: newDoc.id, ...newDoc.data() });
-  } catch (error) {
-    console.error("Error creando sorteo:", error);
-    res.status(500).json({ error: "Error creando sorteo" });
-  }
-});
-
-// 🔹 Listar todos los sorteos
+// Listar todos los sorteos
 app.get("/api/sorteos", async (req, res) => {
   try {
     const snapshot = await db.collection("sorteos").get();
-    const sorteos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const sorteos = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     res.json(sorteos);
   } catch (error) {
-    console.error("Error listando sorteos:", error);
-    res.status(500).json({ error: "Error listando sorteos" });
+    res.status(500).json({ error: "Error obteniendo sorteos" });
   }
 });
 
-// 🔹 Obtener sorteo por ID
+// Detalle sorteo
 app.get("/api/sorteos/:id", async (req, res) => {
   try {
-    const docRef = db.collection("sorteos").doc(req.params.id);
-    const docSnap = await docRef.get();
-
+    const docSnap = await db.collection("sorteos").doc(req.params.id).get();
     if (!docSnap.exists) return res.status(404).json({ error: "Sorteo no encontrado" });
-
     res.json({ id: docSnap.id, ...docSnap.data() });
   } catch (error) {
-    console.error("Error obteniendo sorteo:", error);
     res.status(500).json({ error: "Error obteniendo sorteo" });
   }
 });
 
-// 🔹 Editar sorteo
-app.put("/api/sorteos/:id", async (req, res) => {
+// Crear preferencia de pago
+app.post("/api/crear-preferencia", async (req, res) => {
   try {
-    const { titulo, descripcion, precio, numerosTotales, activo } = req.body;
-    const docRef = db.collection("sorteos").doc(req.params.id);
+    const { sorteoId } = req.body;
+    const docSnap = await db.collection("sorteos").doc(sorteoId).get();
+    if (!docSnap.exists) return res.status(404).json({ error: "Sorteo no encontrado" });
 
-    await docRef.update({
-      titulo,
-      descripcion,
-      precio: Number(precio),
-      numerosTotales: Number(numerosTotales),
-      ...(activo !== undefined ? { activo } : {})
-    });
+    const sorteo = docSnap.data();
 
-    const updatedDoc = await docRef.get();
-    res.json({ id: updatedDoc.id, ...updatedDoc.data() });
+    const preference = {
+      items: [{ title: sorteo.titulo, quantity: 1, currency_id: "ARS", unit_price: parseFloat(sorteo.precio) }],
+      back_urls: { success: "http://localhost:5173/success", failure: "http://localhost:5173/failure", pending: "http://localhost:5173/pending" },
+      auto_return: "approved",
+    };
+
+    const response = await mercadopago.preferences.create(preference);
+    res.json(response.body);
   } catch (error) {
-    console.error("Error actualizando sorteo:", error);
-    res.status(500).json({ error: "Error actualizando sorteo" });
+    res.status(500).json({ error: "Error creando preferencia" });
   }
 });
 
-// 🔹 Eliminar sorteo
-app.delete("/api/sorteos/:id", async (req, res) => {
-  try {
-    await db.collection("sorteos").doc(req.params.id).delete();
-    res.json({ message: "Sorteo eliminado" });
-  } catch (error) {
-    console.error("Error eliminando sorteo:", error);
-    res.status(500).json({ error: "Error eliminando sorteo" });
-  }
-});
-
-// 🔹 Rutas de prueba
-app.get("/", (req, res) => {
-  res.send("Backend sorteos funcionando correctamente ✅");
-});
-
-// 🔹 Servidor
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));

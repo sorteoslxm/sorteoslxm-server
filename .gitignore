@@ -1,3 +1,2 @@
-node_modules/
+/node_modules
 .env
-config/sorteoslxm-firebase-adminsdk.json
