@@ -1,10 +1,27 @@
-import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import admin from "firebase-admin";
 
-const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+let serviceAccount;
 
-initializeApp({
-  credential: cert(firebaseConfig),
-});
+try {
+  if (process.env.FIREBASE_CONFIG) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    console.log("🌍 Credenciales Firebase cargadas desde variable de entorno.");
+  } else {
+    throw new Error("No se encontraron credenciales Firebase en variable de entorno.");
+  }
 
-export const db = getFirestore();
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      storageBucket: `${serviceAccount.project_id}.appspot.com`,
+    });
+  }
+
+} catch (error) {
+  console.error("❌ Error inicializando Firebase:", error);
+}
+
+const db = admin.firestore();
+const bucket = admin.storage().bucket();
+
+export { db, bucket };
