@@ -1,18 +1,38 @@
+// firebase.js
 import admin from "firebase-admin";
-import dotenv from "dotenv";
+import { readFileSync, existsSync } from "fs";
 
-dotenv.config();
+let serviceAccount;
 
-const serviceAccount = {
-  type: "service_account",
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL
-};
+try {
+  // 🔹 Si existe el archivo local (modo desarrollo en tu compu)
+  if (existsSync("./config/sorteoslxm-firebase-adminsdk.json")) {
+    const fileData = readFileSync("./config/sorteoslxm-firebase-adminsdk.json");
+    serviceAccount = JSON.parse(fileData);
+    console.log("🔑 Credenciales Firebase cargadas desde archivo local.");
+  } 
+  // 🔹 Si no existe el archivo (modo producción en Render)
+  else if (process.env.FIREBASE_ADMIN_CREDENTIALS) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_CREDENTIALS);
+    console.log("🌍 Credenciales Firebase cargadas desde variable de entorno.");
+  } 
+  // 🔹 Si no encuentra nada
+  else {
+    throw new Error("No se encontraron credenciales Firebase.");
+  }
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      storageBucket: `${serviceAccount.project_id}.appspot.com`,
+    });
+  }
+
+} catch (error) {
+  console.error("❌ Error inicializando Firebase:", error);
+}
 
 const db = admin.firestore();
-export { db };
+const bucket = admin.storage().bucket();
+
+export { db, bucket };
