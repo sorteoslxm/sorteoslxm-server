@@ -10,3 +10,5 @@ config/sorteoslxm-firebase-adminsdk.json
 /config/sorteoslxm-firebase-adminsdk.json
 .env
 11ed3ce (Backend listo para Render)
+.env
+config/*.json
