@@ -5,11 +5,12 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// 🔹 Convertir la clave en objeto (desde variable de entorno)
+// 🔹 Cargar credenciales desde variable de entorno
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
 initializeApp({
-  credential: cert(serviceAccount),
+  credential: cert(serviceAccount)
 });
 
+// 🔹 Exportar Firestore
 export const db = getFirestore();

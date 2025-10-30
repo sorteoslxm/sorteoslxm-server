@@ -1,6 +1,6 @@
 node_modules/
 .env
-sorteoslxm-firebase-adminsdk.json
+config/sorteoslxm-firebase-adminsdk.json
 config/*.json
 build/
 .DS_Store
