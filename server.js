@@ -1,23 +1,32 @@
 // server.js
 import express from "express";
 import cors from "cors";
+
 import multer from "multer";
 import { db } from "./config/firebase.js";
 import { cloudinary } from "./config/cloudinary.js";
+
+import dotenv from "dotenv";
+import admin from "firebase-admin";
+import mercadopago from "mercadopago";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// --- CONFIGURACIONES INICIALES ---
+dotenv.config();
+
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔹 Multer para subir archivos
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+// Para obtener __dirname en ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// 🔹 Crear sorteo con imagen
-app.post("/api/sorteos", upload.single("imagen"), async (req, res) => {
-  try {
-    const file = req.file;
-    const { titulo, descripcion, precio, numerosTotales } = req.body;
+// --- FIREBASE ADMIN SDK ---
+let serviceAccount;
+
 
     if (!file) return res.status(400).json({ error: "Imagen requerida" });
 
@@ -44,20 +53,58 @@ app.post("/api/sorteos", upload.single("imagen"), async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error creando sorteo" });
-  }
-});
 
-// 🔹 Listar todos los sorteos
-app.get("/api/sorteos", async (req, res) => {
+try {
+  // Si estamos en Render, las credenciales vienen del entorno
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else if (process.env.FIREBASE_ADMIN_CREDENTIALS) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_CREDENTIALS);
+  } else {
+    // Si estás en local, usá el archivo .json
+    serviceAccount = JSON.parse(
+      JSON.stringify(
+        await import("./config/sorteoslxm-firebase-adminsdk.json", {
+          assert: { type: "json" },
+        })
+      )
+    );
+
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+
+  console.log("✅ Firebase Admin inicializado correctamente");
+} catch (error) {
+  console.error("❌ Error al inicializar Firebase Admin:", error);
+}
+
+// --- MERCADO PAGO CONFIG ---
+if (process.env.MERCADOPAGO_ACCESS_TOKEN) {
+  mercadopago.configure({
+    access_token: process.env.MERCADOPAGO_ACCESS_TOKEN,
+  });
+  console.log("✅ MercadoPago configurado");
+} else {
+  console.warn("⚠️ Falta MERCADOPAGO_ACCESS_TOKEN en variables de entorno");
+}
+
+// --- RUTAS FIREBASE (ejemplo) ---
+const db = admin.firestore();
+
+app.get("/sorteos", async (req, res) => {
   try {
     const snapshot = await db.collection("sorteos").get();
-    const sorteos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const sorteos = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     res.json(sorteos);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Error listando sorteos" });
+    res.status(500).json({ error: "Error al obtener sorteos" });
   }
 });
+
 
 // 🔹 Obtener sorteo por ID
 app.get("/api/sorteos/:id", async (req, res) => {
@@ -108,5 +155,15 @@ app.delete("/api/sorteos/:id", async (req, res) => {
 });
 
 // 🔹 Servidor
+
+// --- RUTA TEST PARA VER SI EL SERVIDOR RESPONDE ---
+app.get("/", (req, res) => {
+  res.send("🚀 Backend Sorteos LXM funcionando correctamente");
+});
+
+// --- SERVIDOR ---
+
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
+});
