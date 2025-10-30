@@ -1,10 +1,9 @@
 node_modules/
 .env
-config/sorteoslxm-firebase-adminsdk.json
+sorteoslxm-firebase-adminsdk.json
+config/*.json
 build/
 .DS_Store
-cloudinary.js
-firebase.js
 node
 server@1.0.0
 testFirebase.js
